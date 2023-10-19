@@ -44,13 +44,6 @@ def encode_reg(reg, w):
     return match_rm_or_reg(reg, w)
 
 
-def encode_rm(mod, rm, w):
-    match mod:
-        case '11': return match_rm_or_reg(rm, w)
-
-        case _: raise Exception(f'mod = {mod} combination not found')
-
-
 def main():
     # read binary file
     asm_file = sys.argv[1]
@@ -60,27 +53,56 @@ def main():
 
     file = open(asm_compiled, mode='rb')
 
-    def mov_reg_to_reg(first_byte, file, output_lines):
-        [d, w] = [first_byte[6], first_byte[7]]
+    def rm_in_effective_address_calc(rm):
+        match rm:
+            case '000': return '[bx + si '
+            case '001': return '[bx + di '
+            case '010': return '[bp + si '
+            case '011': return '[bp + di '
+            case '100': return '[si '
+            case '101': return '[di '
+            case '110': return '[bp '
+            case '111': return '[bx '
+            case _: raise Exception(f'rm={rm} not found')
+
+    def mov_reg_to_reg(cur_byte, file, output_lines):
         temp = BitArray(file.read(1)).b
+
+        [d, w] = [cur_byte[6], cur_byte[7]]
         [mod, reg, rm] = [temp[0:2], temp[2: 5], temp[5:]]
 
-        rm_encoded = encode_rm(mod, rm, w)
+        def calc_effective(mod, rm, file):
+            leading = rm_in_effective_address_calc(rm)
+            if mod == '00':
+                return f'{leading}]'
+
+            snd_byte = BitArray(file.read(1)).b
+            thrd_byte = BitArray(file.read(1)).b if mod == '10' else ''
+
+            if mod == '01':
+                return f'{leading} + {int(snd_byte, 2)}]'
+            else:
+                return f'{leading} + {int(thrd_byte + snd_byte, 2)}]'
+
         reg_encoded = encode_reg(reg, w)
 
-        output_lines.append(f'mov {rm_encoded}, {reg_encoded}')
+        match mod:
+            case '11': output_lines.append(f'mov {match_rm_or_reg(rm, w)}, {reg_encoded}')
+            case _: output_lines.append(f'mov {reg_encoded}, {calc_effective(mod, rm, file)}')
 
-    def mov_immediate_to_reg(first_byte, file, output_lines):
-        [w, reg] = [first_byte[4], first_byte[5:]]
+        # output_lines.append(f'mov {rm_encoded}, {reg_encoded}')
+
+    def mov_immediate_to_reg(cur_byte, file, output_lines):
+        pass
+
+    def mov_immediate_to_reg(cur_byte, file, output_lines):
+        [w, reg] = [cur_byte[4], cur_byte[5:]]
         snd_byte = BitArray(file.read(1)).b
         thrd_byte = BitArray(file.read(1)).b if w == '1' else ''
         # decode register and what to move inside of it
         reg_encoded = encode_reg(reg, w)
 
         data = int(thrd_byte + snd_byte, 2)
-
-        print(thrd_byte + snd_byte)
-        print(data)
 
         output_lines.append(f'mov {reg_encoded}, {data}')
 
@@ -96,6 +118,8 @@ def main():
             # register-to-register
             case ['1', '0', '0', '0', '1', '0', _, _]:
                 mov_reg_to_reg(first_byte, file, output_lines)
+            case ['1', '0', '1', '1', _, _, _, _]:
+                mov_immediate_to_reg(first_byte, file, output_lines)
             case ['1', '0', '1', '1', _, _, _, _]:
                 mov_immediate_to_reg(first_byte, file, output_lines)
             case _:
