@@ -52,8 +52,8 @@ def encode_rm(mod, rm, w):
 
 def main():
     # read binary file
-    asm_file = sys.argv[1]
-    asm_compiled = asm_file.replace('.asm', '')
+    asm_compiled = sys.argv[1]
+    # asm_compiled = asm_file.replace('.asm', '')
 
     output_lines = ['bits 16']
 
